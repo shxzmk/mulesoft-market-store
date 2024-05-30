@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:twilio="http://www.mulesoft.org/schema/mule/twilio" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/twilio http://www.mulesoft.org/schema/mule/twilio/current/mule-twilio.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="ed0dd0fd-18c6-4fc0-83cc-d2eeee65aa34">
+		<http:listener-connection host="192.168.1.37" port="8081">
+			<reconnection >
+				<reconnect />
+			</reconnection>
+		</http:listener-connection>
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="b7a76ce0-5a53-4137-a703-cd0939018d87" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="1234" database="world" />
+	</db:config>
+	<flow name="app-tfm-systemFlow" doc:id="71ac4a1a-6324-4c91-82e5-c42463fcac2c" >
+		<http:listener doc:name="Listener" doc:id="2e4f6487-bf8b-412b-9a5f-e1aad669a9a8" config-ref="HTTP_Listener_config" path="/*" allowedMethods="POST">
+			<http:response statusCode="#[vars.httpStatus default 200]" />
+			<http:error-response statusCode="#[vars.httpStatus default 500]" />
+		</http:listener>
+		<ee:transform doc:name="Data to Insert into DataBase" doc:id="404b8e68-18ad-453c-ac78-ebc1ba45659d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	data: write(payload, "application/json")
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger Input" doc:id="4783c58e-68ad-4904-8b70-31dbb01ca3f3" message="#[payload]"/>
+		<db:insert doc:name="Insert User Data into DataBase MySQL" doc:id="15fb8701-867c-477a-bba7-e96a69be8b98" config-ref="Database_Config">
+			<db:sql ><![CDATA[INSERT INTO DeliveryData (data)
+VALUES (:data)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[payload]]]></db:input-parameters>
+		</db:insert>
+		<ee:transform doc:name="Response Message" doc:id="53d04c77-d9e9-45ed-8494-4d204b1d35c0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	message: "Data saved successfully"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger Output" doc:id="1c305f59-e3c3-4567-a1ab-421e898caae0" message="#[payload]"/>
+		<set-variable value="200" doc:name="Set httpStatus 200" doc:id="ca965c2a-130c-45a8-9702-f49c77593aab" variableName="httpStatus"/>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="d1b52d02-9dba-467e-88c4-af0a58f7e0aa" type="ANY">
+				<ee:transform doc:name="Error Response" doc:id="ea7672ab-bf76-4d1f-82d0-cc74b94af12f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	message: "Error to save some data"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger Error" doc:id="d1ca948c-1480-4e00-b163-bd05b60bb64a" message="#[payload]" />
+				<set-variable value="500" doc:name="Set httpStatus 500" doc:id="75da53bd-1b9a-461f-8f37-793229133554" variableName="httpStatus" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+</mule>
